@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Simple File Uploader Using GCP</title>
+  </head>
+  <body style="font-family: sans-serif; text-align: center; margin-top: 50px">
+    <h2>Upload a File to Google Cloud Storage</h2>
+    <input type="file" id="fileInput" />
+    <button onclick="uploadFile()">Upload</button>
+    <p id="status"></p>
+    <a id="fileLink" target="_blank"></a>
+    <script>
+      async function uploadFile() {
+        const file = document.getElementById("fileInput").files[0];
+        if (!file) return alert("Please select a file");
+
+        const formData = new FormData();
+        formData.append("file", file);
+
+        document.getElementById("status").textContent = "Uploading...";
+
+        try {
+          const res = await fetch(
+            "https://file-upload-backend-864273247514.asia-south1.run.app/upload",
+            {
+              method: "POST",
+              body: formData,
+            }
+          );
+
+          if (!res.ok) {
+            const errorText = await res.text();
+            throw new Error(errorText);
+          }
+
+          const data = await res.json();
+          document.getElementById("status").textContent = "✅ Upload Complete!";
+          document.getElementById("fileLink").textContent = "View File";
+          document.getElementById("fileLink").href = data.fileUrl;
+        } catch (err) {
+          console.error(err);
+          document.getElementById("status").textContent = "❌ Upload failed";
+          alert(`Upload failed: ${err.message}`);
+        }
+      }
+    </script>
+  </body>
+</html>
