@@ -10,17 +10,33 @@ const app = express();
 
 app.use(cors({ origin: "*" }));
 app.options("*", cors());
-
 app.use(express.json());
 
 const storage = new Storage();
 const bucket = storage.bucket(process.env.GOOGLE_BUCKET_NAME);
 
-app.get("/", (req, res) => {
-  res.send("Simple File Uploader Backend is running!");
-});
+const allowedTypes = [
+  "image/jpeg",
+  "image/png",
+  "text/plain",
+  "application/pdf",
+];
 
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: (req, file, cb) => {
+    if (!allowedTypes.includes(file.mimetype)) {
+      cb(
+        new Error(
+          "Invalid file type. Only images, text, or PDF allowed to Upload"
+        ),
+        false
+      );
+    } else {
+      cb(null, true);
+    }
+  },
+});
 
 app.post("/upload", upload.single("file"), async (req, res) => {
   try {
@@ -28,6 +44,15 @@ app.post("/upload", upload.single("file"), async (req, res) => {
     if (!file) {
       return res.status(400).send("Please upload a file");
     }
+
+    const metadata = {
+      originalName: file.originalname,
+      mimeType: file.mimetype,
+      sizeKB: (file.size / 1024).toFixed(2),
+      uploadedAt: new Date().toISOString(),
+    };
+
+    console.log("File metadata:", metadata);
 
     const fileName = `${Date.now()}_${file.originalname}`;
     const blob = bucket.file(fileName);
@@ -42,9 +67,13 @@ app.post("/upload", upload.single("file"), async (req, res) => {
     });
 
     blobStream.on("finish", async () => {
-      await blob.makePublic();
-      const fileUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
-      res.json({ fileUrl });
+      const publicUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+      console.log(`File uploaded successfully: ${publicUrl}`);
+      res.json({
+        message: "File uploaded successfully!",
+        fileUrl: publicUrl,
+        metadata,
+      });
     });
 
     blobStream.end(file.buffer);
@@ -54,7 +83,20 @@ app.post("/upload", upload.single("file"), async (req, res) => {
   }
 });
 
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    if (err.code === "LIMIT_FILE_SIZE") {
+      return res
+        .status(400)
+        .json({ error: "File too large. Max 5MB allowed." });
+    }
+  } else if (err.message.includes("Invalid file type")) {
+    return res.status(400).json({ error: err.message });
+  }
+  next(err);
+});
+
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`App is Listening at the  ${PORT}`);
 });
